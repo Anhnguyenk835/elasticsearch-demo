@@ -7,6 +7,7 @@ import { INDEX, INDEX_MAPPINGS } from "./es_config.mjs";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ES_URL = process.env.ELASTICSEARCH_URL || "http://127.0.0.1:9200";
 
+// kết nối đến elasticsearch
 const client = new Client({ node: ES_URL });
 
 function loadSeedRecords() {
@@ -29,6 +30,7 @@ function loadSeedRecords() {
   });
 }
 
+// tạo index nếu chưa có
 async function ensureIndex() {
   const exists = await client.indices.exists({ index: INDEX });
   if (!exists) {
@@ -40,11 +42,13 @@ async function ensureIndex() {
   }
 }
 
+// index dữ liệu
 async function bulkIndex(records) {
   const operations = records.flatMap((r, i) => [
     { index: { _index: INDEX, _id: String(i + 1) } },
     { title: { input: r.title, weight: r.weight } },
   ]);
+  // index dữ liệu vào elasticsearch bằng bulk
   const bulkRes = await client.bulk({ refresh: true, operations });
   if (bulkRes.errors) {
     const failed = bulkRes.items.find((it) => it.index?.error);

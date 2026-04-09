@@ -10,7 +10,7 @@ const ES_URL = process.env.ELASTICSEARCH_URL || "http://127.0.0.1:9200";
 
 const client = new Client({ node: ES_URL });
 
-/** Chỉ tạo index (rỗng) nếu chưa có. Dữ liệu nạp bằng: npm run seed */
+/** tạo index (rỗng) nếu chưa có -> nap dữ liệu: npm run seed */
 async function ensureIndex() {
   const exists = await client.indices.exists({ index: INDEX });
   if (!exists) {
@@ -24,7 +24,7 @@ async function ensureIndex() {
   }
 }
 
-/** Gợi ý đọc trực tiếp từ Elasticsearch (Completion Suggester). */
+/** gợi ý trực tiếp từ elasticsearch (completion suggester). */
 async function suggest(prefix) {
   const q = prefix.trim();
   if (!q) return [];
@@ -35,7 +35,7 @@ async function suggest(prefix) {
       "movie-suggest": {
         prefix: q,
         completion: {
-          field: "title",
+          field: "title",   // gợi ý từ trường title ở index
           size: 10,
           skip_duplicates: true,
           fuzzy: { fuzziness: "AUTO" },
@@ -52,6 +52,7 @@ async function suggest(prefix) {
 const app = express();
 app.use(express.static(path.join(__dirname, "public")));
 
+// expose api
 app.get("/api/suggest", async (req, res) => {
   try {
     const q = typeof req.query.q === "string" ? req.query.q : "";
@@ -60,7 +61,7 @@ app.get("/api/suggest", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(503).json({
-      error: "Không kết nối được Elasticsearch. Chạy: docker compose up -d",
+      error: "không kết nối được elasticsearch -> Run: docker compose up -d",
     });
   }
 });
