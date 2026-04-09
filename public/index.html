@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Type-ahead — Elasticsearch</title>
+    <style>
+      :root {
+        font-family: system-ui, sans-serif;
+        background: #0f1419;
+        color: #e7e9ea;
+      }
+      body {
+        max-width: 36rem;
+        margin: 3rem auto;
+        padding: 0 1rem;
+      }
+      h1 {
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+      }
+      p {
+        color: #8b98a5;
+        font-size: 0.9rem;
+        margin: 0 0 1.25rem;
+      }
+      .wrap {
+        position: relative;
+      }
+      input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 0.65rem 0.85rem;
+        font-size: 1rem;
+        border: 1px solid #38444d;
+        border-radius: 8px;
+        background: #16181c;
+        color: inherit;
+      }
+      input:focus {
+        outline: none;
+        border-color: #1d9bf0;
+        box-shadow: 0 0 0 2px rgba(29, 155, 240, 0.25);
+      }
+      ul {
+        list-style: none;
+        margin: 0.35rem 0 0;
+        padding: 0;
+        border: 1px solid #38444d;
+        border-radius: 8px;
+        background: #16181c;
+        max-height: 14rem;
+        overflow-y: auto;
+        display: none;
+      }
+      ul.open {
+        display: block;
+      }
+      li {
+        padding: 0.5rem 0.85rem;
+        cursor: pointer;
+        font-size: 0.95rem;
+      }
+      li:hover,
+      li.active {
+        background: #1d2f3d;
+      }
+      .hint {
+        margin-top: 1rem;
+        font-size: 0.8rem;
+        color: #71767b;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>TÌM KIẾM PHIM</h1>
+    <p>
+      Gõ vài ký tự để tìm kiếm tên phim
+    </p>
+    <!-- Type-ahead UI: gọi API -> danh sách gợi ý từ backend-->
+    <div class="wrap">
+      <input
+        type="search"
+        id="q"
+        placeholder="Ví dụ: spider, dune, mắt..."
+        autocomplete="off"
+        aria-autocomplete="list"
+        aria-controls="suggestions"
+        aria-expanded="false"
+      />
+      <ul id="suggestions" role="listbox" aria-label="Gợi ý"></ul>
+    </div>
+
+    <!-- debounce + fetch /api/suggest (gọi backend Elasticsearch) + render gợi ý -->
+    <script>
+      const input = document.getElementById("q");
+      const list = document.getElementById("suggestions");
+      let debounceTimer;
+      let activeIndex = -1;
+      let items = [];
+
+      // Debounce: tránh gọi API liên tục mỗi kí tự — chỉ gọi sau khi người dùng ngừng gõ ~180ms (type-ahead)
+      function debounce(fn, ms) {
+        return (...args) => {
+          clearTimeout(debounceTimer);
+          debounceTimer = setTimeout(() => fn(...args), ms);
+        };
+      }
+
+      // dropdown gợi ý từ mảng items (danh sách gợi ý)
+      function render() {
+        list.innerHTML = "";
+        items.forEach((text, i) => {
+          const li = document.createElement("li");
+          li.role = "option";
+          li.id = "opt-" + i;
+          li.textContent = text;
+          if (i === activeIndex) li.classList.add("active");
+          li.addEventListener("mousedown", (e) => {
+            e.preventDefault();
+            input.value = text;
+            close();
+          });
+          list.appendChild(li);
+        });
+        const open = items.length > 0;
+        list.classList.toggle("open", open);
+        input.setAttribute("aria-expanded", open ? "true" : "false");
+      }
+
+      function close() {
+        items = [];
+        activeIndex = -1;
+        render();
+      }
+
+      // === GỌI API BACKEND (type-ahead): GET /api/suggest?q=... → JSON { suggestions: string[] } ===
+      const fetchSuggest = debounce(async (q) => {
+        if (!q.trim()) {
+          close();
+          return;
+        }
+        try {
+          const r = await fetch(
+            "/api/suggest?q=" + encodeURIComponent(q.trim())
+          );
+          const data = await r.json();
+          if (data.error) {
+            items = [];
+            render();
+            return;
+          }
+          items = data.suggestions || [];
+          activeIndex = items.length ? 0 : -1;
+          render();
+        } catch {
+          close();
+        }
+      }, 180);
+
+      // Mỗi lần gõ trong ô tìm kiếm → kích hoạt chuỗi gọi API phía trên (qua debounce)
+      input.addEventListener("input", () => {
+        fetchSuggest(input.value);
+      });
+
+      // Điều hướng bàn phím trên danh sách gợi ý (không gọi API thêm)
+      input.addEventListener("keydown", (e) => {
+        if (!list.classList.contains("open") || !items.length) return;
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          activeIndex = Math.min(activeIndex + 1, items.length - 1);
+          render();
+        } else if (e.key === "ArrowUp") {
+          e.preventDefault();
+          activeIndex = Math.max(activeIndex - 1, 0);
+          render();
+        } else if (e.key === "Enter" && activeIndex >= 0) {
+          e.preventDefault();
+          input.value = items[activeIndex];
+          close();
+        } else if (e.key === "Escape") {
+          close();
+        }
+      });
+
+      document.addEventListener("click", (e) => {
+        if (!e.target.closest(".wrap")) close();
+      });
+    </script>
+  </body>
+</html>
