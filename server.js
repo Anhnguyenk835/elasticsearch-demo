@@ -49,6 +49,36 @@ async function suggest(prefix) {
   return [...new Set(options)];
 }
 
+/** Search 2: gợi ý qua truy vấn search_as_you_type + multi_match bool_prefix. */
+async function suggestSearchAsYouType(prefix) {
+  const q = prefix.trim();
+  if (!q) return [];
+
+  const res = await client.search({
+    index: INDEX,
+    size: 10,
+    _source: ["title_sayt"],
+    query: {
+      multi_match: {
+        query: q,
+        type: "bool_prefix",
+        fields: [
+          "title_sayt",
+          "title_sayt._2gram",
+          "title_sayt._3gram",
+          "title_sayt._index_prefix",
+        ],
+      },
+    },
+  });
+
+  const hits = res.hits?.hits ?? [];
+  const titles = hits
+    .map((h) => h._source?.title_sayt)
+    .filter((t) => typeof t === "string");
+  return [...new Set(titles)];
+}
+
 const app = express();
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -57,6 +87,19 @@ app.get("/api/suggest", async (req, res) => {
   try {
     const q = typeof req.query.q === "string" ? req.query.q : "";
     const suggestions = await suggest(q);
+    res.json({ suggestions });
+  } catch (err) {
+    console.error(err);
+    res.status(503).json({
+      error: "không kết nối được elasticsearch -> Run: docker compose up -d",
+    });
+  }
+});
+
+app.get("/api/suggest-sayt", async (req, res) => {
+  try {
+    const q = typeof req.query.q === "string" ? req.query.q : "";
+    const suggestions = await suggestSearchAsYouType(q);
     res.json({ suggestions });
   } catch (err) {
     console.error(err);

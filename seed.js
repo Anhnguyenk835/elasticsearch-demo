@@ -46,7 +46,10 @@ async function ensureIndex() {
 async function bulkIndex(records) {
   const operations = records.flatMap((r, i) => [
     { index: { _index: INDEX, _id: String(i + 1) } },
-    { title: { input: r.title, weight: r.weight } },
+    {
+      title: { input: r.title, weight: r.weight },
+      title_sayt: r.title,
+    },
   ]);
   // index dữ liệu vào elasticsearch bằng bulk
   const bulkRes = await client.bulk({ refresh: true, operations });

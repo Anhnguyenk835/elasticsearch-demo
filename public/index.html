@@ -11,7 +11,7 @@
         color: #e7e9ea;
       }
       body {
-        max-width: 36rem;
+        max-width: 40rem;
         margin: 3rem auto;
         padding: 0 1rem;
       }
@@ -24,6 +24,20 @@
         color: #8b98a5;
         font-size: 0.9rem;
         margin: 0 0 1.25rem;
+      }
+      .search-section {
+        margin-bottom: 2rem;
+      }
+      .search-section h2 {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: #e7e9ea;
+        margin: 0 0 0.35rem;
+      }
+      .search-section .sub {
+        font-size: 0.8rem;
+        color: #71767b;
+        margin: 0 0 0.65rem;
       }
       .wrap {
         position: relative;
@@ -71,121 +85,161 @@
         font-size: 0.8rem;
         color: #71767b;
       }
+      code {
+        font-family: ui-monospace, monospace;
+        font-size: 0.82em;
+        background: #1a2332;
+        padding: 0.12em 0.4em;
+        border-radius: 4px;
+        color: #8ecae6;
+      }
     </style>
   </head>
   <body>
     <h1>TÌM KIẾM PHIM</h1>
-    <p>
-      Gõ vài ký tự để tìm kiếm tên phim
-    </p>
-    <!-- Type-ahead UI: gọi API -> danh sách gợi ý từ backend-->
-    <div class="wrap">
-      <input
-        type="search"
-        id="q"
-        placeholder="Ví dụ: spider, dune, mắt..."
-        autocomplete="off"
-        aria-autocomplete="list"
-        aria-controls="suggestions"
-        aria-expanded="false"
-      />
-      <ul id="suggestions" role="listbox" aria-label="Gợi ý"></ul>
-    </div>
+    <p>Hai ô gõ gợi ý: Completion Suggester và <code>search_as_you_type</code> (bool_prefix).</p>
 
-    <!-- debounce + fetch /api/suggest (gọi backend Elasticsearch) + render gợi ý -->
+    <!-- Search 1: Completion Suggester — /api/suggest -->
+    <section class="search-section" aria-labelledby="lbl-search1">
+      <h2 id="lbl-search1">Search 1 — Completion Suggester</h2>
+      <p class="sub">API: <code>GET /api/suggest?q=</code></p>
+      <div class="wrap" id="wrap1">
+        <input
+          type="search"
+          id="q1"
+          placeholder="Ví dụ: spider, dune, mắt..."
+          autocomplete="off"
+          aria-autocomplete="list"
+          aria-controls="suggestions1"
+          aria-expanded="false"
+        />
+        <ul id="suggestions1" role="listbox" aria-label="Gợi ý completion"></ul>
+      </div>
+    </section>
+
+    <!-- Search 2: search_as_you_type — /api/suggest-sayt -->
+    <section class="search-section" aria-labelledby="lbl-search2">
+      <h2 id="lbl-search2">Search 2 — search_as_you_type</h2>
+      <p class="sub">API: <code>GET /api/suggest-sayt?q=</code> · multi_match <code>bool_prefix</code></p>
+      <div class="wrap" id="wrap2">
+        <input
+          type="search"
+          id="q2"
+          placeholder="Thử cụm từ: dark knight, fast furi..."
+          autocomplete="off"
+          aria-autocomplete="list"
+          aria-controls="suggestions2"
+          aria-expanded="false"
+        />
+        <ul id="suggestions2" role="listbox" aria-label="Gợi ý search as you type"></ul>
+      </div>
+    </section>
+
     <script>
-      const input = document.getElementById("q");
-      const list = document.getElementById("suggestions");
-      let debounceTimer;
-      let activeIndex = -1;
-      let items = [];
+      /**
+       * Type-ahead: debounce + fetch API + dropdown (mỗi ô một instance).
+       * @param {{ wrap: HTMLElement, input: HTMLInputElement, list: HTMLElement, apiUrl: string }} o
+       */
+      function wireTypeahead(o) {
+        let debounceTimer;
+        let activeIndex = -1;
+        let items = [];
 
-      // Debounce: tránh gọi API liên tục mỗi kí tự — chỉ gọi sau khi người dùng ngừng gõ ~180ms (type-ahead)
-      function debounce(fn, ms) {
-        return (...args) => {
-          clearTimeout(debounceTimer);
-          debounceTimer = setTimeout(() => fn(...args), ms);
-        };
-      }
-
-      // dropdown gợi ý từ mảng items (danh sách gợi ý)
-      function render() {
-        list.innerHTML = "";
-        items.forEach((text, i) => {
-          const li = document.createElement("li");
-          li.role = "option";
-          li.id = "opt-" + i;
-          li.textContent = text;
-          if (i === activeIndex) li.classList.add("active");
-          li.addEventListener("mousedown", (e) => {
-            e.preventDefault();
-            input.value = text;
-            close();
-          });
-          list.appendChild(li);
-        });
-        const open = items.length > 0;
-        list.classList.toggle("open", open);
-        input.setAttribute("aria-expanded", open ? "true" : "false");
-      }
-
-      function close() {
-        items = [];
-        activeIndex = -1;
-        render();
-      }
-
-      // === GỌI API BACKEND (type-ahead): GET /api/suggest?q=... → JSON { suggestions: string[] } ===
-      const fetchSuggest = debounce(async (q) => {
-        if (!q.trim()) {
-          close();
-          return;
+        function debounce(fn, ms) {
+          return (...args) => {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => fn(...args), ms);
+          };
         }
-        try {
-          const r = await fetch(
-            "/api/suggest?q=" + encodeURIComponent(q.trim())
-          );
-          const data = await r.json();
-          if (data.error) {
-            items = [];
-            render();
+
+        function render() {
+          o.list.innerHTML = "";
+          const baseId = o.list.id + "-opt-";
+          items.forEach((text, i) => {
+            const li = document.createElement("li");
+            li.role = "option";
+            li.id = baseId + i;
+            li.textContent = text;
+            if (i === activeIndex) li.classList.add("active");
+            li.addEventListener("mousedown", (e) => {
+              e.preventDefault();
+              o.input.value = text;
+              close();
+            });
+            o.list.appendChild(li);
+          });
+          const open = items.length > 0;
+          o.list.classList.toggle("open", open);
+          o.input.setAttribute("aria-expanded", open ? "true" : "false");
+        }
+
+        function close() {
+          items = [];
+          activeIndex = -1;
+          render();
+        }
+
+        const fetchSuggest = debounce(async (q) => {
+          if (!q.trim()) {
+            close();
             return;
           }
-          items = data.suggestions || [];
-          activeIndex = items.length ? 0 : -1;
-          render();
-        } catch {
-          close();
-        }
-      }, 180);
+          try {
+            const r = await fetch(
+              o.apiUrl + encodeURIComponent(q.trim())
+            );
+            const data = await r.json();
+            if (data.error) {
+              items = [];
+              render();
+              return;
+            }
+            items = data.suggestions || [];
+            activeIndex = items.length ? 0 : -1;
+            render();
+          } catch {
+            close();
+          }
+        }, 180);
 
-      // Mỗi lần gõ trong ô tìm kiếm → kích hoạt chuỗi gọi API phía trên (qua debounce)
-      input.addEventListener("input", () => {
-        fetchSuggest(input.value);
+        o.input.addEventListener("input", () => fetchSuggest(o.input.value));
+
+        o.input.addEventListener("keydown", (e) => {
+          if (!o.list.classList.contains("open") || !items.length) return;
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            activeIndex = Math.min(activeIndex + 1, items.length - 1);
+            render();
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            activeIndex = Math.max(activeIndex - 1, 0);
+            render();
+          } else if (e.key === "Enter" && activeIndex >= 0) {
+            e.preventDefault();
+            o.input.value = items[activeIndex];
+            close();
+          } else if (e.key === "Escape") {
+            close();
+          }
+        });
+
+        document.addEventListener("click", (e) => {
+          if (!o.wrap.contains(e.target)) close();
+        });
+      }
+
+      wireTypeahead({
+        wrap: document.getElementById("wrap1"),
+        input: document.getElementById("q1"),
+        list: document.getElementById("suggestions1"),
+        apiUrl: "/api/suggest?q=",
       });
 
-      // Điều hướng bàn phím trên danh sách gợi ý (không gọi API thêm)
-      input.addEventListener("keydown", (e) => {
-        if (!list.classList.contains("open") || !items.length) return;
-        if (e.key === "ArrowDown") {
-          e.preventDefault();
-          activeIndex = Math.min(activeIndex + 1, items.length - 1);
-          render();
-        } else if (e.key === "ArrowUp") {
-          e.preventDefault();
-          activeIndex = Math.max(activeIndex - 1, 0);
-          render();
-        } else if (e.key === "Enter" && activeIndex >= 0) {
-          e.preventDefault();
-          input.value = items[activeIndex];
-          close();
-        } else if (e.key === "Escape") {
-          close();
-        }
-      });
-
-      document.addEventListener("click", (e) => {
-        if (!e.target.closest(".wrap")) close();
+      wireTypeahead({
+        wrap: document.getElementById("wrap2"),
+        input: document.getElementById("q2"),
+        list: document.getElementById("suggestions2"),
+        apiUrl: "/api/suggest-sayt?q=",
       });
     </script>
   </body>
