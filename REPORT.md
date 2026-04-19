@@ -6,7 +6,8 @@ Nhóm 18
 
 ## 1. Hình ảnh ứng dụng (Screenshots)
 Dưới đây là hình ảnh so sánh hai chiến lược gợi ý trực tiếp ngay khi người dùng gõ (Type-ahead):
-![Hình ảnh trang web]()
+![Search với Completion Suggestor](image/img_1.png)
+![Search với Search-as-you-type](image/img_2.png)
 
 ## 2. Hướng dẫn chạy và sử dụng ứng dụng
 
