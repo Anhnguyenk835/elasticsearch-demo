@@ -3,148 +3,709 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Type-ahead — Elasticsearch</title>
+    <title>CineSearch — Elasticsearch Type-ahead Demo</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
     <style>
+      /* ─── Reset & Base ─────────────────────────────────────────────── */
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
       :root {
-        font-family: system-ui, sans-serif;
-        background: #0f1419;
-        color: #e7e9ea;
+        --bg:        #05070f;
+        --surface:   #0d1117;
+        --glass:     rgba(255, 255, 255, 0.04);
+        --glass-border: rgba(255, 255, 255, 0.08);
+        --text:      #e6edf3;
+        --muted:     #7d8590;
+        --accent1:   #6e40c9;   /* purple */
+        --accent2:   #1d9bf0;   /* blue   */
+        --accent3:   #f97316;   /* amber  */
+        --green:     #3fb950;
+        --red:       #f85149;
+        --glow1:     rgba(110, 64, 201, 0.35);
+        --glow2:     rgba(29, 155, 240, 0.3);
+        --radius:    14px;
+        --radius-sm: 8px;
+        --font-sans: 'Inter', system-ui, sans-serif;
+        --font-head: 'Space Grotesk', system-ui, sans-serif;
+        --transition: 0.18s cubic-bezier(0.4, 0, 0.2, 1);
       }
+
+      html { scroll-behavior: smooth; }
+
       body {
-        max-width: 40rem;
-        margin: 3rem auto;
-        padding: 0 1rem;
+        font-family: var(--font-sans);
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+        overflow-x: hidden;
       }
-      h1 {
-        font-size: 1.25rem;
-        font-weight: 600;
-        margin-bottom: 0.5rem;
+
+      /* ─── Animated Background ──────────────────────────────────────── */
+      .bg-orbs {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 0;
+        overflow: hidden;
       }
-      p {
-        color: #8b98a5;
-        font-size: 0.9rem;
-        margin: 0 0 1.25rem;
+      .orb {
+        position: absolute;
+        border-radius: 50%;
+        filter: blur(80px);
+        opacity: 0.5;
+        animation: drift 20s ease-in-out infinite alternate;
       }
-      .search-section {
-        margin-bottom: 2rem;
+      .orb-1 {
+        width: 500px; height: 500px;
+        background: radial-gradient(circle, #6e40c9 0%, transparent 70%);
+        top: -150px; left: -100px;
+        animation-duration: 22s;
       }
-      .search-section h2 {
-        font-size: 0.95rem;
-        font-weight: 600;
-        color: #e7e9ea;
-        margin: 0 0 0.35rem;
+      .orb-2 {
+        width: 400px; height: 400px;
+        background: radial-gradient(circle, #1d9bf0 0%, transparent 70%);
+        top: 40%; right: -120px;
+        animation-duration: 18s;
+        animation-delay: -8s;
       }
-      .search-section .sub {
+      .orb-3 {
+        width: 300px; height: 300px;
+        background: radial-gradient(circle, #f97316 0%, transparent 70%);
+        bottom: -80px; left: 30%;
+        animation-duration: 25s;
+        animation-delay: -5s;
+        opacity: 0.3;
+      }
+      @keyframes drift {
+        0%   { transform: translate(0, 0) scale(1); }
+        50%  { transform: translate(40px, 30px) scale(1.08); }
+        100% { transform: translate(-20px, 50px) scale(0.95); }
+      }
+
+      /* ─── Layout ───────────────────────────────────────────────────── */
+      .page {
+        position: relative;
+        z-index: 1;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 3rem 1.25rem 5rem;
+      }
+
+      .container {
+        width: 100%;
+        max-width: 720px;
+      }
+
+      /* ─── Header ───────────────────────────────────────────────────── */
+      .header {
+        text-align: center;
+        margin-bottom: 3rem;
+        animation: fadeDown 0.6s ease both;
+      }
+      .logo-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        background: var(--glass);
+        border: 1px solid var(--glass-border);
+        border-radius: 999px;
+        padding: 0.35rem 1rem;
+        font-size: 0.78rem;
+        font-weight: 500;
+        color: var(--muted);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        margin-bottom: 1.25rem;
+        backdrop-filter: blur(12px);
+      }
+      .logo-badge .dot {
+        width: 6px; height: 6px;
+        border-radius: 50%;
+        background: var(--green);
+        box-shadow: 0 0 8px var(--green);
+        animation: pulse-dot 2s ease infinite;
+      }
+      @keyframes pulse-dot {
+        0%, 100% { opacity: 1; }
+        50%       { opacity: 0.4; }
+      }
+
+      .header h1 {
+        font-family: var(--font-head);
+        font-size: clamp(2.2rem, 6vw, 3.5rem);
+        font-weight: 700;
+        line-height: 1.1;
+        letter-spacing: -0.02em;
+        background: linear-gradient(135deg, #fff 30%, #a78bfa 60%, #60a5fa 90%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        margin-bottom: 0.75rem;
+      }
+
+      .header p {
+        color: var(--muted);
+        font-size: 1rem;
+        line-height: 1.6;
+        max-width: 480px;
+        margin: 0 auto;
+      }
+
+      /* ─── Stats Bar ────────────────────────────────────────────────── */
+      .stats-bar {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+        flex-wrap: wrap;
+        margin-bottom: 2.5rem;
+        animation: fadeDown 0.6s 0.1s ease both;
+      }
+      .stat {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        background: var(--glass);
+        border: 1px solid var(--glass-border);
+        border-radius: 999px;
+        padding: 0.3rem 0.85rem;
         font-size: 0.8rem;
-        color: #71767b;
-        margin: 0 0 0.65rem;
+        color: var(--muted);
+        backdrop-filter: blur(8px);
       }
-      .wrap {
+      .stat-icon { font-size: 0.9rem; }
+      .stat span { color: var(--text); font-weight: 600; }
+
+      /* ─── Search Cards ─────────────────────────────────────────────── */
+      .search-grid {
+        display: grid;
+        gap: 1.25rem;
+      }
+
+      .search-card {
+        background: var(--glass);
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius);
+        padding: 1.5rem;
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        transition: border-color var(--transition), box-shadow var(--transition);
+        animation: fadeUp 0.5s ease both;
+      }
+      .search-card:nth-child(1) { animation-delay: 0.15s; }
+      .search-card:nth-child(2) { animation-delay: 0.25s; }
+
+      .search-card:focus-within {
+        border-color: rgba(110, 64, 201, 0.5);
+        box-shadow: 0 0 0 1px rgba(110, 64, 201, 0.2), 0 8px 32px rgba(0,0,0,0.3);
+      }
+      .search-card:nth-child(2):focus-within {
+        border-color: rgba(29, 155, 240, 0.5);
+        box-shadow: 0 0 0 1px rgba(29, 155, 240, 0.2), 0 8px 32px rgba(0,0,0,0.3);
+      }
+
+      .card-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+      }
+      .card-title-group { flex: 1; }
+
+      .card-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.72rem;
+        font-weight: 600;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+        margin-bottom: 0.3rem;
+      }
+      .card-label.purple { color: #a78bfa; }
+      .card-label.blue   { color: #60a5fa; }
+      .card-label .badge {
+        padding: 0.15rem 0.5rem;
+        border-radius: 999px;
+        font-size: 0.65rem;
+      }
+      .card-label.purple .badge { background: rgba(167,139,250,0.15); color: #a78bfa; }
+      .card-label.blue   .badge { background: rgba(96,165,250,0.15);  color: #60a5fa; }
+
+      .card-title {
+        font-family: var(--font-head);
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--text);
+        margin-bottom: 0.2rem;
+      }
+      .card-subtitle {
+        font-size: 0.78rem;
+        color: var(--muted);
+      }
+      .card-subtitle code {
+        font-family: ui-monospace, 'Courier New', monospace;
+        font-size: 0.75em;
+        background: rgba(255,255,255,0.06);
+        padding: 0.1em 0.4em;
+        border-radius: 4px;
+        color: #93c5fd;
+      }
+
+      /* ─── Input ────────────────────────────────────────────────────── */
+      .input-wrap {
         position: relative;
       }
-      input {
-        width: 100%;
-        box-sizing: border-box;
-        padding: 0.65rem 0.85rem;
+      .input-icon {
+        position: absolute;
+        left: 1rem;
+        top: 50%;
+        transform: translateY(-50%);
         font-size: 1rem;
-        border: 1px solid #38444d;
-        border-radius: 8px;
-        background: #16181c;
-        color: inherit;
+        opacity: 0.4;
+        pointer-events: none;
+        transition: opacity var(--transition);
       }
-      input:focus {
+      .input-wrap:focus-within .input-icon { opacity: 0.8; }
+
+      input[type="search"] {
+        width: 100%;
+        padding: 0.8rem 1rem 0.8rem 2.75rem;
+        font-size: 0.97rem;
+        font-family: var(--font-sans);
+        background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: var(--radius-sm);
+        color: var(--text);
         outline: none;
-        border-color: #1d9bf0;
-        box-shadow: 0 0 0 2px rgba(29, 155, 240, 0.25);
+        transition: border-color var(--transition), background var(--transition), box-shadow var(--transition);
+        appearance: none;
+        -webkit-appearance: none;
       }
-      ul {
+      input[type="search"]::-webkit-search-cancel-button { display: none; }
+      input[type="search"]::placeholder { color: var(--muted); }
+
+      input[type="search"]:focus {
+        background: rgba(255,255,255,0.07);
+        border-color: rgba(110,64,201,0.6);
+        box-shadow: 0 0 0 3px rgba(110,64,201,0.12);
+      }
+      .search-card:nth-child(2) input[type="search"]:focus {
+        border-color: rgba(29,155,240,0.6);
+        box-shadow: 0 0 0 3px rgba(29,155,240,0.12);
+      }
+
+      /* Clear button */
+      .clear-btn {
+        position: absolute;
+        right: 0.75rem;
+        top: 50%;
+        transform: translateY(-50%);
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: var(--muted);
+        font-size: 1rem;
+        padding: 0.25rem;
+        border-radius: 4px;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity var(--transition), color var(--transition);
+        line-height: 1;
+      }
+      .clear-btn.visible {
+        opacity: 1;
+        pointer-events: auto;
+      }
+      .clear-btn:hover { color: var(--text); }
+
+      /* ─── Dropdown ─────────────────────────────────────────────────── */
+      .dropdown {
+        position: relative;
+        margin-top: 0.5rem;
+      }
+
+      ul.suggestions {
         list-style: none;
-        margin: 0.35rem 0 0;
-        padding: 0;
-        border: 1px solid #38444d;
-        border-radius: 8px;
-        background: #16181c;
-        max-height: 14rem;
+        background: #0d1117;
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: var(--radius-sm);
+        max-height: 280px;
         overflow-y: auto;
         display: none;
+        box-shadow: 0 16px 48px rgba(0,0,0,0.6), 0 4px 16px rgba(0,0,0,0.4);
+
+        /* Custom scrollbar */
+        scrollbar-width: thin;
+        scrollbar-color: rgba(255,255,255,0.1) transparent;
       }
-      ul.open {
-        display: block;
+      ul.suggestions::-webkit-scrollbar { width: 4px; }
+      ul.suggestions::-webkit-scrollbar-track { background: transparent; }
+      ul.suggestions::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 99px; }
+
+      ul.suggestions.open { display: block; animation: dropIn 0.15s ease; }
+
+      @keyframes dropIn {
+        from { opacity: 0; transform: translateY(-6px); }
+        to   { opacity: 1; transform: translateY(0); }
       }
-      li {
-        padding: 0.5rem 0.85rem;
+
+      ul.suggestions li {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        padding: 0.65rem 1rem;
+        font-size: 0.92rem;
         cursor: pointer;
-        font-size: 0.95rem;
+        color: var(--text);
+        border-bottom: 1px solid rgba(255,255,255,0.04);
+        transition: background var(--transition);
+        position: relative;
       }
-      li:hover,
-      li.active {
-        background: #1d2f3d;
+      ul.suggestions li:last-child { border-bottom: none; }
+      ul.suggestions li::before {
+        content: '🎬';
+        font-size: 0.85rem;
+        opacity: 0.5;
+        flex-shrink: 0;
       }
-      .hint {
-        margin-top: 1rem;
-        font-size: 0.8rem;
-        color: #71767b;
+      ul.suggestions li:hover,
+      ul.suggestions li.active {
+        background: rgba(255,255,255,0.06);
       }
-      code {
-        font-family: ui-monospace, monospace;
-        font-size: 0.82em;
-        background: #1a2332;
-        padding: 0.12em 0.4em;
-        border-radius: 4px;
-        color: #8ecae6;
+      ul.suggestions li.active { background: rgba(110,64,201,0.15); }
+      .search-card:nth-child(2) ul.suggestions li.active { background: rgba(29,155,240,0.12); }
+
+      ul.suggestions li .highlight {
+        color: #a78bfa;
+        font-weight: 600;
+      }
+      .search-card:nth-child(2) ul.suggestions li .highlight { color: #60a5fa; }
+
+      /* Empty & Loading state */
+      .suggestions-meta {
+        padding: 0.85rem 1rem;
+        font-size: 0.82rem;
+        color: var(--muted);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      /* ─── Loading Spinner ──────────────────────────────────────────── */
+      .spinner {
+        width: 14px; height: 14px;
+        border: 2px solid rgba(255,255,255,0.1);
+        border-top-color: #a78bfa;
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+        flex-shrink: 0;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+
+      /* ─── Result count badge ───────────────────────────────────────── */
+      .result-count {
+        font-size: 0.72rem;
+        font-weight: 500;
+        padding: 0.15rem 0.55rem;
+        border-radius: 999px;
+        margin-left: auto;
+        background: rgba(110,64,201,0.2);
+        color: #a78bfa;
+        flex-shrink: 0;
+      }
+      .search-card:nth-child(2) .result-count {
+        background: rgba(29,155,240,0.15);
+        color: #60a5fa;
+      }
+
+      /* ─── Comparison Table ─────────────────────────────────────────── */
+      .compare-section {
+        margin-top: 2.5rem;
+        animation: fadeUp 0.5s 0.35s ease both;
+      }
+      .compare-section h2 {
+        font-family: var(--font-head);
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: var(--muted);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+      .compare-section h2::before, .compare-section h2::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--glass-border);
+      }
+
+      .compare-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.83rem;
+        background: var(--glass);
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius);
+        overflow: hidden;
+        backdrop-filter: blur(12px);
+      }
+      .compare-table th {
+        padding: 0.75rem 1rem;
+        text-align: left;
+        font-weight: 600;
+        font-size: 0.75rem;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        background: rgba(255,255,255,0.03);
+        border-bottom: 1px solid var(--glass-border);
+        color: var(--muted);
+      }
+      .compare-table th:first-child { color: var(--muted); }
+      .compare-table th:nth-child(2) { color: #a78bfa; }
+      .compare-table th:nth-child(3) { color: #60a5fa; }
+
+      .compare-table td {
+        padding: 0.65rem 1rem;
+        border-bottom: 1px solid rgba(255,255,255,0.04);
+        color: var(--text);
+        vertical-align: middle;
+      }
+      .compare-table tr:last-child td { border-bottom: none; }
+      .compare-table td:first-child { color: var(--muted); font-size: 0.8rem; }
+
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        font-size: 0.75rem;
+        font-weight: 500;
+        padding: 0.2rem 0.55rem;
+        border-radius: 999px;
+      }
+      .tag.green { background: rgba(63,185,80,0.15); color: #3fb950; }
+      .tag.amber { background: rgba(249,115,22,0.15); color: #fb923c; }
+      .tag.muted { background: rgba(255,255,255,0.07); color: var(--muted); }
+
+      /* ─── Footer ───────────────────────────────────────────────────── */
+      .footer {
+        margin-top: 3rem;
+        text-align: center;
+        font-size: 0.78rem;
+        color: var(--muted);
+        animation: fadeUp 0.5s 0.4s ease both;
+        line-height: 1.8;
+      }
+      .footer a { color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
+      .footer .team {
+        display: inline-flex;
+        gap: 0.4rem;
+        flex-wrap: wrap;
+        justify-content: center;
+        margin-top: 0.25rem;
+      }
+      .footer .pill {
+        background: var(--glass);
+        border: 1px solid var(--glass-border);
+        border-radius: 999px;
+        padding: 0.2rem 0.7rem;
+        font-size: 0.75rem;
+        color: var(--muted);
+      }
+
+      /* ─── Keyframe helpers ─────────────────────────────────────────── */
+      @keyframes fadeDown {
+        from { opacity: 0; transform: translateY(-16px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes fadeUp {
+        from { opacity: 0; transform: translateY(16px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+
+      /* ─── Responsive ───────────────────────────────────────────────── */
+      @media (max-width: 480px) {
+        .page { padding: 2rem 1rem 4rem; }
+        .stats-bar { gap: 0.5rem; }
+        .card-header { flex-direction: column; }
       }
     </style>
   </head>
   <body>
-    <h1>TÌM KIẾM PHIM</h1>
-    <p>Hai ô gõ gợi ý: Completion Suggester và <code>search_as_you_type</code> (bool_prefix).</p>
+    <!-- Background orbs -->
+    <div class="bg-orbs" aria-hidden="true">
+      <div class="orb orb-1"></div>
+      <div class="orb orb-2"></div>
+      <div class="orb orb-3"></div>
+    </div>
 
-    <!-- Search 1: Completion Suggester — /api/suggest -->
-    <section class="search-section" aria-labelledby="lbl-search1">
-      <h2 id="lbl-search1">Search 1 — Completion Suggester</h2>
-      <p class="sub">API: <code>GET /api/suggest?q=</code></p>
-      <div class="wrap" id="wrap1">
-        <input
-          type="search"
-          id="q1"
-          placeholder="Ví dụ: spider, dune, mắt..."
-          autocomplete="off"
-          aria-autocomplete="list"
-          aria-controls="suggestions1"
-          aria-expanded="false"
-        />
-        <ul id="suggestions1" role="listbox" aria-label="Gợi ý completion"></ul>
-      </div>
-    </section>
+    <div class="page">
+      <div class="container">
 
-    <!-- Search 2: search_as_you_type — /api/suggest-sayt -->
-    <section class="search-section" aria-labelledby="lbl-search2">
-      <h2 id="lbl-search2">Search 2 — search_as_you_type</h2>
-      <p class="sub">API: <code>GET /api/suggest-sayt?q=</code> · multi_match <code>bool_prefix</code></p>
-      <div class="wrap" id="wrap2">
-        <input
-          type="search"
-          id="q2"
-          placeholder="Thử cụm từ: dark knight, fast furi..."
-          autocomplete="off"
-          aria-autocomplete="list"
-          aria-controls="suggestions2"
-          aria-expanded="false"
-        />
-        <ul id="suggestions2" role="listbox" aria-label="Gợi ý search as you type"></ul>
-      </div>
-    </section>
+        <!-- Header -->
+        <header class="header">
+          <div class="logo-badge">
+            <span class="dot"></span>
+            Elasticsearch · Type-ahead Demo
+          </div>
+          <h1>CineSearch</h1>
+          <p>Tìm kiếm gợi ý phim theo thời gian thực, sử dụng Elasticsearch làm lớp lưu trữ và tìm kiếm.</p>
+        </header>
+
+        <!-- Stats bar -->
+        <div class="stats-bar" role="status" aria-label="Thống kê hệ thống">
+          <div class="stat"><span class="stat-icon">🗄️</span> Index: <span>typeahead_movies</span></div>
+          <div class="stat"><span class="stat-icon">🎬</span> Dataset: <span>100+ phim</span></div>
+          <div class="stat"><span class="stat-icon">⚡</span> Debounce: <span>180ms</span></div>
+          <div class="stat"><span class="stat-icon">🔍</span> Strategies: <span>2</span></div>
+        </div>
+
+        <!-- Search cards -->
+        <div class="search-grid">
+
+          <!-- Card 1: Completion Suggester -->
+          <section class="search-card" aria-labelledby="lbl-card1">
+            <div class="card-header">
+              <div class="card-title-group">
+                <div class="card-label purple">
+                  ⚡ Strategy 1
+                  <span class="badge">FST · In-memory</span>
+                </div>
+                <h2 class="card-title" id="lbl-card1">Completion Suggester</h2>
+                <p class="card-subtitle">
+                  API: <code>GET /api/suggest?q=</code> · prefix match từ đầu chuỗi
+                </p>
+              </div>
+            </div>
+            <div class="input-wrap">
+              <span class="input-icon">🔍</span>
+              <input
+                type="search"
+                id="q1"
+                placeholder="Thử gõ: spider, dune, mắt, avengers..."
+                autocomplete="off"
+                spellcheck="false"
+                aria-autocomplete="list"
+                aria-controls="suggestions1"
+                aria-expanded="false"
+              />
+              <button class="clear-btn" id="clear1" aria-label="Xóa tìm kiếm">✕</button>
+            </div>
+            <div class="dropdown">
+              <ul id="suggestions1" class="suggestions" role="listbox" aria-label="Gợi ý completion suggester"></ul>
+            </div>
+          </section>
+
+          <!-- Card 2: search_as_you_type -->
+          <section class="search-card" aria-labelledby="lbl-card2">
+            <div class="card-header">
+              <div class="card-title-group">
+                <div class="card-label blue">
+                  🔎 Strategy 2
+                  <span class="badge">N-gram · bool_prefix</span>
+                </div>
+                <h2 class="card-title" id="lbl-card2">search_as_you_type</h2>
+                <p class="card-subtitle">
+                  API: <code>GET /api/suggest-sayt?q=</code> · tìm giữa chuỗi, hỗ trợ cụm từ
+                </p>
+              </div>
+            </div>
+            <div class="input-wrap">
+              <span class="input-icon">🔍</span>
+              <input
+                type="search"
+                id="q2"
+                placeholder="Thử gõ: dark knight, way home, fast furi..."
+                autocomplete="off"
+                spellcheck="false"
+                aria-autocomplete="list"
+                aria-controls="suggestions2"
+                aria-expanded="false"
+              />
+              <button class="clear-btn" id="clear2" aria-label="Xóa tìm kiếm">✕</button>
+            </div>
+            <div class="dropdown">
+              <ul id="suggestions2" class="suggestions" role="listbox" aria-label="Gợi ý search as you type"></ul>
+            </div>
+          </section>
+
+        </div><!-- /search-grid -->
+
+        <!-- Comparison table -->
+        <div class="compare-section">
+          <h2>So sánh hai phương thức</h2>
+          <table class="compare-table" aria-label="Bảng so sánh Completion Suggester và search_as_you_type">
+            <thead>
+              <tr>
+                <th>Tiêu chí</th>
+                <th>⚡ Completion Suggester</th>
+                <th>🔎 search_as_you_type</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Cấu trúc nội bộ</td>
+                <td>FST (in-memory)</td>
+                <td>Inverted index + n-gram</td>
+              </tr>
+              <tr>
+                <td>Kiểu match</td>
+                <td><span class="tag amber">Prefix đầu chuỗi</span></td>
+                <td><span class="tag green">Prefix + giữa chuỗi</span></td>
+              </tr>
+              <tr>
+                <td>Fuzzy / sai chính tả</td>
+                <td><span class="tag green">✓ fuzziness AUTO</span></td>
+                <td><span class="tag green">✓ qua analyzer</span></td>
+              </tr>
+              <tr>
+                <td>Trọng số ưu tiên</td>
+                <td><span class="tag green">✓ weight field</span></td>
+                <td><span class="tag muted">Relevance score</span></td>
+              </tr>
+              <tr>
+                <td>Use case tối ưu</td>
+                <td>Tag, tên sản phẩm cố định</td>
+                <td>Câu văn, cụm nhiều từ</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+          <div>Lab 08 · Nhóm 18 · Hệ quản trị CSDL nâng cao</div>
+          <div class="team">
+            <span class="pill">23127152 · Nguyễn Tuấn Anh</span>
+            <span class="pill">23127300 · Hà Bảo Ngọc</span>
+          </div>
+        </footer>
+
+      </div><!-- /container -->
+    </div><!-- /page -->
 
     <script>
       /**
-       * Type-ahead: debounce + fetch API + dropdown (mỗi ô một instance).
-       * @param {{ wrap: HTMLElement, input: HTMLInputElement, list: HTMLElement, apiUrl: string }} o
+       * Factory: wires up a type-ahead search box with debounce, keyboard nav,
+       * loading state, result highlight, and clear button.
        */
-      function wireTypeahead(o) {
-        let debounceTimer;
-        let activeIndex = -1;
-        let items = [];
+      function wireTypeahead({ inputEl, listEl, clearEl, apiUrl, accentClass }) {
+        let debounceTimer = null;
+        let activeIndex   = -1;
+        let items         = [];
+        let lastQuery     = '';
 
+        /* ── Debounce ── */
         function debounce(fn, ms) {
           return (...args) => {
             clearTimeout(debounceTimer);
@@ -152,94 +713,150 @@
           };
         }
 
-        function render() {
-          o.list.innerHTML = "";
-          const baseId = o.list.id + "-opt-";
-          items.forEach((text, i) => {
-            const li = document.createElement("li");
-            li.role = "option";
-            li.id = baseId + i;
-            li.textContent = text;
-            if (i === activeIndex) li.classList.add("active");
-            li.addEventListener("mousedown", (e) => {
-              e.preventDefault();
-              o.input.value = text;
-              close();
-            });
-            o.list.appendChild(li);
-          });
-          const open = items.length > 0;
-          o.list.classList.toggle("open", open);
-          o.input.setAttribute("aria-expanded", open ? "true" : "false");
+        /* ── Highlight matching text ── */
+        function highlight(text, query) {
+          if (!query) return document.createTextNode(text);
+          const idx = text.toLowerCase().indexOf(query.toLowerCase());
+          if (idx === -1) return document.createTextNode(text);
+          const frag = document.createDocumentFragment();
+          frag.appendChild(document.createTextNode(text.slice(0, idx)));
+          const mark = document.createElement('span');
+          mark.className = 'highlight';
+          mark.textContent = text.slice(idx, idx + query.length);
+          frag.appendChild(mark);
+          frag.appendChild(document.createTextNode(text.slice(idx + query.length)));
+          return frag;
         }
 
+        /* ── Render dropdown ── */
+        function render(q) {
+          listEl.innerHTML = '';
+
+          if (items.length === 0) {
+            listEl.classList.remove('open');
+            inputEl.setAttribute('aria-expanded', 'false');
+            return;
+          }
+
+          const countEl = document.createElement('li');
+          countEl.className = 'suggestions-meta';
+          countEl.setAttribute('aria-hidden', 'true');
+          countEl.innerHTML = `<span>${items.length} gợi ý</span><span class="result-count">${items.length}</span>`;
+          listEl.appendChild(countEl);
+
+          items.forEach((text, i) => {
+            const li = document.createElement('li');
+            li.setAttribute('role', 'option');
+            li.id = listEl.id + '-opt-' + i;
+            li.appendChild(highlight(text, q));
+            if (i === activeIndex) li.classList.add('active');
+            li.addEventListener('mousedown', e => { e.preventDefault(); select(text); });
+            listEl.appendChild(li);
+          });
+
+          listEl.classList.add('open');
+          inputEl.setAttribute('aria-expanded', 'true');
+        }
+
+        /* ── Show loading ── */
+        function showLoading() {
+          listEl.innerHTML = `<li class="suggestions-meta"><span class="spinner"></span> Đang tìm kiếm…</li>`;
+          listEl.classList.add('open');
+        }
+
+        /* ── Close dropdown ── */
         function close() {
           items = [];
           activeIndex = -1;
-          render();
+          listEl.classList.remove('open');
+          listEl.innerHTML = '';
+          inputEl.setAttribute('aria-expanded', 'false');
         }
 
-        const fetchSuggest = debounce(async (q) => {
-          if (!q.trim()) {
-            close();
-            return;
-          }
+        /* ── Select item ── */
+        function select(text) {
+          inputEl.value = text;
+          clearEl.classList.add('visible');
+          close();
+        }
+
+        /* ── Fetch with debounce ── */
+        const fetchSuggest = debounce(async q => {
+          q = q.trim();
+          if (!q) { close(); return; }
+          lastQuery = q;
+          showLoading();
           try {
-            const r = await fetch(
-              o.apiUrl + encodeURIComponent(q.trim())
-            );
+            const r    = await fetch(apiUrl + encodeURIComponent(q));
             const data = await r.json();
-            if (data.error) {
-              items = [];
-              render();
-              return;
-            }
-            items = data.suggestions || [];
+            if (data.error) { close(); return; }
+            items       = data.suggestions || [];
             activeIndex = items.length ? 0 : -1;
-            render();
-          } catch {
-            close();
-          }
+            render(q);
+          } catch { close(); }
         }, 180);
 
-        o.input.addEventListener("input", () => fetchSuggest(o.input.value));
+        /* ── Input event ── */
+        inputEl.addEventListener('input', () => {
+          const v = inputEl.value;
+          clearEl.classList.toggle('visible', v.length > 0);
+          fetchSuggest(v);
+        });
 
-        o.input.addEventListener("keydown", (e) => {
-          if (!o.list.classList.contains("open") || !items.length) return;
-          if (e.key === "ArrowDown") {
+        /* ── Clear button ── */
+        clearEl.addEventListener('click', () => {
+          inputEl.value = '';
+          clearEl.classList.remove('visible');
+          close();
+          inputEl.focus();
+        });
+
+        /* ── Keyboard navigation ── */
+        inputEl.addEventListener('keydown', e => {
+          if (!listEl.classList.contains('open') || !items.length) return;
+          if (e.key === 'ArrowDown') {
             e.preventDefault();
             activeIndex = Math.min(activeIndex + 1, items.length - 1);
-            render();
-          } else if (e.key === "ArrowUp") {
+            render(lastQuery);
+            // scroll active into view
+            const active = listEl.querySelector('.active');
+            if (active) active.scrollIntoView({ block: 'nearest' });
+          } else if (e.key === 'ArrowUp') {
             e.preventDefault();
             activeIndex = Math.max(activeIndex - 1, 0);
-            render();
-          } else if (e.key === "Enter" && activeIndex >= 0) {
+            render(lastQuery);
+            const active = listEl.querySelector('.active');
+            if (active) active.scrollIntoView({ block: 'nearest' });
+          } else if (e.key === 'Enter' && activeIndex >= 0) {
             e.preventDefault();
-            o.input.value = items[activeIndex];
+            select(items[activeIndex]);
+          } else if (e.key === 'Escape') {
             close();
-          } else if (e.key === "Escape") {
-            close();
+            inputEl.blur();
           }
         });
 
-        document.addEventListener("click", (e) => {
-          if (!o.wrap.contains(e.target)) close();
+        /* ── Click outside ── */
+        document.addEventListener('click', e => {
+          if (!inputEl.contains(e.target) && !listEl.contains(e.target)) close();
         });
       }
 
+      /* ── Wire both boxes ── */
       wireTypeahead({
-        wrap: document.getElementById("wrap1"),
-        input: document.getElementById("q1"),
-        list: document.getElementById("suggestions1"),
-        apiUrl: "/api/suggest?q=",
+        inputEl:     document.getElementById('q1'),
+        listEl:      document.getElementById('suggestions1'),
+        clearEl:     document.getElementById('clear1'),
+        apiUrl:      '/api/suggest?q=',
+        accentClass: 'purple',
       });
 
       wireTypeahead({
-        wrap: document.getElementById("wrap2"),
-        input: document.getElementById("q2"),
-        list: document.getElementById("suggestions2"),
-        apiUrl: "/api/suggest-sayt?q=",
+        inputEl:     document.getElementById('q2'),
+        listEl:      document.getElementById('suggestions2'),
+        clearEl:     document.getElementById('clear2'),
+        apiUrl:      '/api/suggest-sayt?q=',
+        accentClass: 'blue',
       });
     </script>
   </body>

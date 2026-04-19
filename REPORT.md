@@ -1,121 +1,132 @@
-# Demo: Type-ahead với Elasticsearch
+# Lab 08 - Elasticsearch and Typeahead
 
-## 1. Tổng quan demo
+Nhóm 18
+- 23127152 - Nguyễn Tuấn Anh
+- 23127300 - Hà Bảo Ngọc
 
-- **Search 1 — Completion Suggester:** người dùng gõ tiền tố, backend gọi Elasticsearch **Suggest API** trên field kiểu `completion` (`title`), trả về danh sách gợi ý tối đa 10 mục.
-- **Search 2 — `search_as_you_type`:** cùng bài toán gợi ý nhưng dùng **truy vấn tìm kiếm** `multi_match` với `type: "bool_prefix"` trên field `title_sayt` và các subfield do Elasticsearch tạo sẵn (`_2gram`, `_3gram`, `_index_prefix`).
-- **Dữ liệu:** nạp từ `data_seed.json` qua `npm run seed`; API đọc **chỉ từ Elasticsearch**, không hardcode danh sách trong server khi search.
-- **UI:** hai ô tìm kiếm, debounce ~180ms, gọi lần lượt `GET /api/suggest?q=` và `GET /api/suggest-sayt?q=`.
+## 1. Hình ảnh ứng dụng (Screenshots)
+Dưới đây là hình ảnh so sánh hai chiến lược gợi ý trực tiếp ngay khi người dùng gõ (Type-ahead):
+![Hình ảnh trang web]()
 
----
+## 2. Hướng dẫn chạy và sử dụng ứng dụng
 
-## 2. Các options kỹ thuật: full-text search + type-ahead trên Elasticsearch
+Để có thể khởi chạy được server, máy tính cần cài sẵn **Node.js** và **Docker**. Thực hiện các bước sau:
 
-Phần này nói về **cách thiết kế truy vấn và index** để vừa hỗ trợ **gõ dần (type-ahead)** vừa bám sát **tìm kiếm full-text** (nhiều từ, thứ tự, relevance), **không** nói tới Docker/cloud hay cách cài cluster.
-
-| Option | Cơ chế chính | Type-ahead / full-text |
-|--------|----------------|------------------------|
-| **A. Completion Suggester** | Field `completion`; API `_search` với `suggest.completion`, thường kèm `prefix`. | **Type-ahead rất mạnh:** độ trễ thấp, FSM tối ưu cho tiền tố. **Không phải full-text kiểu BM25:** không đánh giá relevance theo câu dài như `match`; phù hợp danh sách “ứng viên” cố định (brand, địa danh, tiêu đề catalog). |
-| **B. `search_as_you_type` + `bool_prefix`** | Datatype đặc biệt sinh subfield (`_2gram`, `_3gram`, `_index_prefix`…); truy vấn `multi_match` `type: "bool_prefix"`. | **Cân bằng:** từng **token** trong câu có thể là **tiền tố** → gõ dần cụm (“dark kn…”) vẫn khớp; bám **mô hình tìm kiếm** hơn completion thuần. Chi phí index và mapping cố định theo ES. |
-| **C. Edge n-gram / n-gram (analyzer tùy chỉnh)** | `text` + filter `edge_ngram` hoặc `ngram` trong `analyzer`; query `match`, `match_bool_prefix`, hoặc `match_phrase_prefix`. | **Linh hoạt tối đa:** tự kiểm soát min/max gram, analyzer tiếng Việt, stopword. **Nhược:** phải tự thiết kế mapping, dễ phình index nếu `ngram` quá rộng; cần hiểu tokenization. |
-| **D. `match_phrase_prefix`** | Cụm từ + từ cuối là prefix trên field `text` (thường không dùng n-gram). | **Đơn giản** khi chỉ cần “cụm + tiền tố từ cuối”. **Nhược:** từ cuối có thể tốn kém (prefix trên term lớn); ít “mượt” cho từng từ giữa câu đang gõ dở như `bool_prefix` + SAYT. |
-| **E. `prefix` / `wildcard` trên `keyword`** | So khớp tiền tố chuỗi nguyên khối. | Chỉ hợp **mã/id/tên không tách từ**; **không** thay cho full-text đa từ; thường tránh cho ô search người dùng tự do. |
-
-### 2.1. Ưu / nhược 
-
-- **A — Completion:** cực nhanh cho autocomplete “một dòng”; dễ thêm **fuzzy** trên suggester. Hạn chế: dữ liệu cần chuẩn bị dạng “ứng viên”; không thay thế search page đầy đủ.
-- **B — `search_as_you_type`:** ít boilerplate hơn **C** vì ES định nghĩa sẵn subfield; **`bool_prefix`** hỗ trợ **nhiều từ đang gõ dở** — đúng ý “full-text + as you type”. Fuzzy tích hợp kém hơn so với `match` thuần.
-- **C — N-gram tự cấu hình:** mạnh khi cần locale, synonym, fine-tuning; chi phí bảo trì mapping cao hơn **B**.
-- **D / E:** bổ trợ trong một số màn hình; ít dùng làm **một** giải pháp duy nhất cho ô search gợi ý kiểu Google.
-
-### 2.2. Li do demo chọn **A + B**
-
-- **Search 1 (`completion`):** minh họa **chuẩn autocomplete** — latency thấp, fuzzy trên tiền tố, phù hợp hộp gợi ý ngay dưới ô nhập.
-- **Search 2 (`search_as_you_type` + `bool_prefix`):** minh họa **cùng bài toán UX type-ahead** nhưng đi theo **trục full-text** (multi-term, prefix theo từ), để so sánh trực quan hai họ giải pháp trên cùng bộ dữ liệu seed.
-
----
-
-## 3. Hướng dẫn chạy (demo)
-
-1. Có **Elasticsearch** chạy tại `http://127.0.0.1:9200` (trong repo này thường dùng **Docker Compose** — xem `docker-compose.yml`; không phải “option” full-text, chỉ là cách tiện để chạy ES local).
-2. Trong thư mục `elasticsearch-demo`:  
-   `docker compose up -d`  
-   Đợi cluster sẵn sàng (thường vài chục giây), kiểm tra: `curl http://127.0.0.1:9200`.
-3. `npm install` (lần đầu), sau đó:  
-   `npm run seed` — nạp dữ liệu từ `data_seed.json` vào index `typeahead_movies`.  
-   *Nếu đổi mapping:* xóa index cũ rồi seed lại (xem comment trong `es_config.mjs`).
-4. `npm start` — mở `http://localhost:3000`.
-
----
-
-## 4. Quyết định kiểu tham số và mapping
-
-### 4.1. Hai “đường” gợi ý — hai kiểu field
-
-| Thành phần | Kiểu field / API | Lý do thiết kế |
-|------------|------------------|----------------|
-| **Search 1** | `title`: `completion` + **Suggest** `completion` | FSM index tối ưu cho **prefix completion**; độ trễ thấp, đúng bài toán autocomplete cổ điển. |
-| **Search 2** | `title_sayt`: `search_as_you_type` + **`multi_match` `bool_prefix`** | Elasticsearch sinh sẵn edge n-gram / prefix subfield; `bool_prefix` cho phép match **nhiều từ theo thứ tự** (gõ dần cụm như “dark kn…”). |
-
-Cùng một `title` nguồn từ seed được ghi **hai lần** vào hai field khác nhau để so sánh hai kỹ thuật, không tranh chấp mapping (một document không thể vừa là `completion` vừa là full `text` trên cùng một path đơn giản cho hai mode khác nhau).
-
-### 4.2. Tham số API HTTP
-
-- **`q` (query string):** một chuỗi duy nhất; server `trim()` và từ chối rỗng (trả danh sách rỗng). Đơn giản cho UI, đủ cho demo.
-- **`ELASTICSEARCH_URL`:** cho phép trỏ ES trên máy khác hoặc cloud mà không sửa code.
-- **`PORT`:** cổng Express (mặc định 3000).
-
-### 4.3. Tham số truy vấn Elasticsearch — Search 1 (Completion)
-
-| Tham số | Giá trị trong demo | Ý nghĩa |
-|---------|-------------------|---------|
-| `prefix` | Nội dung `q` sau `trim` | Tiền tố người dùng đang gõ. |
-| `field` | `title` | Field `completion` đã index. |
-| `size` | `10` | Giới hạn số gợi ý; cân bằng giữa đủ dùng và gọn response. |
-| `skip_duplicates` | `true` | Tránh lặp text hiển thị khi index có trùng input. |
-| `fuzzy` | `{ fuzziness: "AUTO" }` | Cho phép sai lệch nhỏ so với tiền tố (xem mục 5). |
-
-### 4.4. Tham số truy vấn — Search 2 (`search_as_you_type`)
-
-| Tham số | Giá trị trong demo | Ý nghĩa |
-|---------|-------------------|---------|
-| `type` | `bool_prefix` | Từng term trong `query` có thể là prefix; phù hợp “gõ dần từng từ”. |
-| `fields` | `title_sayt`, `title_sayt._2gram`, `title_sayt._3gram`, `title_sayt._index_prefix` | Khớp khuyến nghị của Elasticsearch cho datatype `search_as_you_type`. |
-| `size` | `10` | Đồng bộ với Search 1 để so sánh UX. |
-| `_source` | `["title_sayt"]` | Chỉ trả text hiển thị, giảm payload. |
-
----
-
-## 5. Xử lý fuzzy matching
-
-### 5.1. Search 1 — có fuzzy (Completion Suggester)
-
-Trong `server.js`, suggester completion dùng:
-
-```text
-fuzzy: { fuzziness: "AUTO" }
+**Bước 1: Khởi động Elasticsearch service**
+Tại thư mục gốc, khởi chạy Elasticsearch thông qua Docker Compose (chạy ngầm).
+```bash
+docker-compose up -d
 ```
 
-- Elasticsearch áp dụng **fuzzy lên completion suggester** theo tài liệu chính thức: cho phép biến thể gần đúng của **prefix** (sai chính tả nhẹ, bỏ sót ký tự trong giới hạn do `AUTO` quyết định theo độ dài term).
-- **Ưu:** trải nghiệm “dễ chịu” khi gõ lệch vài ký tự.
-- **Hạn chế:** fuzzy trên completion **không thay thế** một truy vấn full-text đầy đủ; chỉ mở rộng không gian gợi ý quanh tiền tố. `AUTO` cố định mức chỉnh sửa theo độ dài — đủ cho demo, có thể tinh chỉnh `fuzziness: 1 | 2` hoặc thêm `min_length`, `prefix_length` nếu cần chặt hơn.
+**Bước 2: Cài đặt dependencies**
+```bash
+npm install
+```
 
-### 5.2. Search 2 — chưa bật fuzzy trong `multi_match`
+**Bước 3: Khởi tạo dữ liệu (Seed)**
+Tạo index và đưa mock-data của phim vào Elasticsearch.
+```bash
+npm run seed
+```
 
-Luồng `bool_prefix` trên `search_as_you_type` trong code hiện tại **không** kèm `fuzziness` của `match` (vì `multi_match` kiểu `bool_prefix` không hỗ trợ fuzziness theo cùng một cơ chế đơn giản như `match` thường).
+**Bước 4: Khởi động server Web**
+```bash
+npm start
+```
+Truy cập ứng dụng tại `http://localhost:3000`. Người dùng nhập tên phim trên thanh tìm kiếm, ứng dụng áp dụng debounce `180ms` trên giao diện, sau đó tự động trả về hai danh sách gợi ý.
 
-**Nếu sau này cần “dễ sai” hơn cho Search 2, có thể cân nhắc:**
+## 3. Cách thức Query hoạt động
 
-- Kết hợp thêm một mệnh đề `should` với `match` / `fuzzy` trên một field `text` phân tích riêng (trade-off: phức tạp scoring, cần tuning).
-- Hoặc dùng **synonym filter** / chuẩn hóa unicode ở **analyzer** cho tiếng Việt thay vì fuzzy.
+Ứng dụng cài đặt hai strategy (Search 1 và Search 2) với Backend là Elasticsearch:
 
-Trong phạm vi demo, **Search 1 đại diện cho fuzzy nhẹ trên autocomplete**; **Search 2 đại diện cho khớp theo cụm từ tiền tố** (đúng hơn khi người dùng gõ đủ chính tả từng phần).
+### 3.1. Strategy 1: Completion Suggester 
+Sử dụng field `title` được define kiểu `completion` trong Elasticsearch mapping. Khi người dùng đánh chữ, query sẽ match với các tiền tố (prefix-match) từ đầu chuỗi văn bản.
 
----
+```json
+{
+  "suggest": {
+    "movie-suggest": {
+      "prefix": "bat",
+      "completion": {
+        "field": "title",
+        "size": 10,
+        "fuzzy": { "fuzziness": "AUTO" }
+      }
+    }
+  }
+}
+```
 
-## 6. Kết luận ngắn
+### 3.2. Strategy 2: search_as_you_type
+Sử dụng field `title_sayt` định nghĩa kiểu dữ liệu `search_as_you_type`. Elasticsearch tự động phân tách dữ liệu ra làm các n-grams (2-gram, 3-gram). Khi gõ, query hoạt động qua `multi_match` với type là `bool_prefix`. Điều này cho phép tìm kiếm từ bất kỳ một phần nào của tên phim (cho phép match ở giữa chuỗi thay vì chỉ từ đầu rễ như Suggestion).
 
-- **Options full-text + type-ahead:** có nhiều hướng (completion, `search_as_you_type`, n-gram tùy chỉnh, `match_phrase_prefix`, v.v.); demo cố ý dùng **hai hướng A + B** để đối chiếu **autocomplete thuần** với **gõ dần theo cụm từ** gần full-text hơn.
-- **Tham số:** tách hai field (`completion` vs `search_as_you_type`) phục vụ hai pattern; tham số `size`, `skip_duplicates`, `fields` của `bool_prefix` bám theo khuyến nghị Elasticsearch.
-- **Fuzzy:** chỉ **Completion Suggester** bật `fuzziness: "AUTO"`; **Search 2** dựa vào `search_as_you_type` + `bool_prefix`, không fuzzy trong truy vấn hiện tại — có thể mở rộng (mệnh đề `should`, field `text` riêng, analyzer) nếu cần.
+```mermaid
+sequenceDiagram
+    participant B as Browser (UI)
+    participant E as Express API
+    participant DB as Elasticsearch Node
 
+    B->>B: User typings (Debounce 180ms)
+    par Fetch Strategy 1
+        B->>E: GET /api/suggest?q=bat
+        E->>DB: POST /typeahead_movies/_search (Suggest Query)
+        DB-->>E: Danh sách Completion
+    and Fetch Strategy 2
+        B->>E: GET /api/suggest-sayt?q=bat
+        E->>DB: POST /typeahead_movies/_search (Bool Prefix Query)
+        DB-->>E: Danh sách hits (Score Docs)
+    end
+    E-->>B: Trả về JSON (movies options)
+    B->>B: Render dropdown UI
+```
+
+### 3.3 So Sánh Hai Chiến Lược Tìm Kiếm
+
+Dưới đây là sự khác biệt giữa hai hướng đề xuất:
+
+| Tiêu chí | Strategy 1: Completion Suggester | Strategy 2: `search_as_you_type` |
+| :--- | :--- | :--- |
+| **Cấu trúc dữ liệu nội bộ** | Đồ thị FST (Lưu trữ in-memory, tối ưu cực tốc độ) | Inverted Index kết hợp tự sinh N-gram |
+| **Vị trí khớp chuỗi (Match Pattern)** | **Prefix Match** (Chỉ cho phép tra cứu khớp từ đầu văn bản) | **Anywhere Match** (Có khả năng tìm thấy các từ hoặc đoạn văn nằm giữa câu) |
+| **Sửa lỗi chính tả (Typo/Fuzzy)** | Hỗ trợ Native rất tốt (Nhờ tham số cấu hình `fuzziness`) | Hỗ trợ qua Multi-match Analyzer |
+| **Xếp hạng kết quả (Ranking)**| Hoạt động theo trọng số cố định đã gán sẵn trong tài liệu (`weight` mapping) | Xếp hạng theo độ liên quan (Relevance TF-IDF/BM25 Score) |
+| **Ứng dụng (Use case)** | Tìm kiếm nhãn tag, gợi ý category gọn gàng hoặc hệ thống ưu tiên "speed-first" | Gợi ý các chuỗi văn bản dài, cụm từ chứa đa ngôn ngữ mà người dùng chỉ nhớ lõm bõm khúc giữa |
+
+## 4. Tại sao cấu trúc Elasticsearch lại hoạt động tốt hơn?
+
+1. **Hiệu suất cực kì cao (FST InMemory):** Thay vì full table scan như query `LIKE '%...%'` truyền thống trong RDBMS (SQL) với chi phí lên đến O(N) gây nghẽn ở hệ thống lớn. Completion suggester của ES tải các field được index vào bộ nhớ RAM và thiết lập chúng dưới dạng đồ thị cấu trúc **FST (Finite State Transducers)**. Cấu trúc này làm index nhỏ gọn nhưng tăng tốc độ truy vấn chỉ mất khoảng `O(1)` hoặc một vài milliseconds.
+2. **Inverted Index và N-Grams:** Đối với search từ vị trí bất kì, ES dùng Inverted Index và chia văn bản thành các n-grams sẵn (vidu: "batman" -> "bat", "atm", "tma"...) giúp cho việc look-up keyword cực kỳ nhanh theo kiến trúc term -> document list mà RDBMS không có thế mạnh tích hợp sẵn.
+3. **Relevance Scoring:** Elasticsearch tính toán sẵn tf-idf/BM25 weight để đưa ra các kết quả ranking hợp ngữ cảnh học và thông minh nhất.
+
+## 5. Danh sách các lựa chọn công nghệ và lý do
+
+### 5.1. Lựa chọn Framework: Express.js (Node.js)
+- **Tùy chọn khác (Options):** Next.js, Nest.JS, Spring Boot, Koa...
+- **Lý do chọn (Why):** Trong một ứng dụng demo và mô hình API server cực kỳ đơn giản (chỉ serve HTML tĩnh và hai REST endpoints), Express.js mang tính chất minimalistic, nhẹ nhàng, tốc độ triển khai lập trình rất nhanh, không đòi hỏi các boilerplates hay overhead configuration nào khác. Thiết lập Express phù hợp với một prototype đánh giá giải thuật.
+
+### 5.2. Chọn Engine Tìm Kiếm: Elasticsearch
+- **Tùy chọn khác (Options):** Redis (Sorted sets, Trie), PostgreSQL (LIKE / Regex), Algolia / Meilisearch...
+- **Lý do chọn (Why):** PostgreSQL không có tính năng native fuzzy matching hiệu quả hoặc tự động n-gram ranking như mong đợi đối với auto-complete. Redis phản hồi rất nhanh nhưng lập trình viên phải tự implement thuật toán cấu trúc dữ liệu Trie hay thuật toán FST một cách rườm rà. Algolia là nền tảng cloud-hosted trả phí không đáp ứng tiêu chuẩn đồ án tự host. Elasticsearch thì trang bị đầy đủ công cụ Suggester / N-gram out-of-the-box, phù hợp trọn vẹn yêu cầu.
+
+### 5.3. Các phương thức Type-ahead Strategy bên trong Elasticsearch
+Khi quyết định tạo auto-complete trên Elasticsearch, có một số lựa chọn sau:
+- **Prefix Query:** Phương pháp cơ bản tìm term theo hậu tố bắt đầu.
+  - *Nhược điểm:* Chậm với tập dữ liệu lớn vì cần duyệt qua tất cả các terms phù hợp; không tối ưu hóa native cho fuzzy matching chuyên sâu.
+- **Edge N-gram (Custom Analyzer):** Cấu hình analyzer tách text thành các n-grams nhỏ lúc lập index (ví dụ "bat" -> "b", "ba", "bat").
+  - *Nhược điểm:* Kích thước Index phình ra vô cùng kích xù, rắc rối khi thiết lập mapping và cấu hình chuẩn cho từng chữ.
+- **Lý do chọn 2 giải pháp hiện tại (Completion Suggester & search_as_you_type):** Đây là hai APIs đặc tả được sinh ra với mục tiêu phục vụ cho type-ahead/auto-complete. Completion Suggester sinh ra cấu trúc FST cho dữ liệu prefix với độ phản hồi cực đoan nhất (millisecond), trong khi `search_as_you_type` thì auto tự sinh các `2-gram`, `3-gram` ẩn kết hợp `bool_prefix` mang lại sự bao quát tìm kiếm N-gram mạnh mẽ không cần config dài dòng.
+
+### 5.4. Tham số cấu hình Fuzzy (fuzziness: "AUTO")
+Bên trong strategy "Completion Suggester", mã nguồn sử dụng:
+```javascript
+fuzzy: { fuzziness: "AUTO" }
+```
+- **Tùy chọn khác (Options):** Thiết lập con số cứng (Fixed edit distance) như `fuzziness: 1` hoặc `fuzziness: 2`.
+- **Lý do chọn AUTO:** `AUTO` có khả năng tự động tính toán giá trị `edit distance (Khoảng cách Levenshtein)` được phép sai phạm dựa trên chiều dài chuỗi người dúng đánh:
+  - Nếu số ký tự gõ vào < 3 ký tự: `fuzziness = 0` (Bắt buộc phải đúng hoàn toàn, tránh trả ra quá nhiều kết quả nhiễu/noise làm nặng payload).
+  - Từ 3 tới 5 ký tự: `fuzziness = 1` (Được sai 1 ký tự).
+  - Lớn hơn 5 ký tự: `fuzziness = 2` (Được sai tối đa 2 ký tự).
+- Tham số này đảm bảo sự thích ứng và linh động tuyệt vời (adaptive approach), tạo ra trải nghiệm người dùng hoàn hảo: vừa chấp nhận lỗi đánh máy (typo tolerance) vừa tối ưu hiệu suất (performance) máy chủ mà không cần bận tâm viết logic kiểm tra (length checking) trong mã nguồn Node.js.
+
+## 6. Tổng kết
+Thông qua đồ án này, hệ thống Auto-complete/Type-ahead minh chứng được sức mạnh cốt lõi và thế mạnh tìm kiếm độc tôn của **Elasticsearch**. Bằng việc khai thác khôn khéo cấu trúc dữ liệu (đồ thị FST trong Completion Suggester và phân mảng n-gram trong Search As You Type), hệ thống không chỉ giải quyết bài toán độ trễ cực thấp trong full-text search, mà còn hỗ trợ native fuzzy matching – điều mà một cơ sở dữ liệu hệ quản trị quan hệ (RDBMS) tiêu tốn rất nhiều tài nguyên để đạt được. Kiến trúc tinh gọn với framework Express.js làm lớp trung gian (API Gateway) mang đến một bản demo trực quan, đáng tin cậy và có tiềm năng scale up dễ dàng trong thực tế.
