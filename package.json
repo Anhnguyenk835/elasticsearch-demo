@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node server.js",
-    "seed": "node seed.js"
+    "start": "node src/server.js",
+    "seed": "node src/seed.js"
   },
   "dependencies": {
     "@elastic/elasticsearch": "^8.11.0",
